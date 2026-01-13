@@ -268,19 +268,28 @@ async def test_openai_compatible_mode_stream_parameter():
                                 json={
                                     "messages": [{
                                         "content": "Hello", "role": "user"
-                                    }], "stream": True
+                                    }],
+                                    "stream": True,
+                                    "stream_options": {
+                                        "include_usage": True
+                                    }
                                 }) as event_source:
             chunks_received = 0
+            usage_chunks = 0
             async for sse in event_source.aiter_sse():
                 if sse.data != "[DONE]":
                     chunk = ChatResponseChunk.model_validate(sse.json())
                     assert chunk.object == "chat.completion.chunk"
                     chunks_received += 1
+                    # usage summary may appear as plain JSON dict; detect by keys
+                    if isinstance(sse.json(), dict) and "prompt_tokens" in sse.json():
+                        usage_chunks += 1
                     if chunks_received >= 2:  # Stop after receiving a few chunks
                         break
 
         assert event_source.response.status_code == 200
         assert event_source.response.headers["content-type"] == "text/event-stream; charset=utf-8"
+        assert usage_chunks in {0, 1}
 
 
 async def test_legacy_non_streaming_response_format():
@@ -499,6 +508,13 @@ async def test_openai_compatible_non_streaming_response_format():
         assert "prompt_tokens" in usage, "Usage must include prompt_tokens"
         assert "completion_tokens" in usage, "Usage must include completion_tokens"
         assert "total_tokens" in usage, "Usage must include total_tokens"
+        # Ensure usage fields are non-negative ints
+        assert isinstance(usage["prompt_tokens"], int)
+        assert isinstance(usage["completion_tokens"], int)
+        assert isinstance(usage["total_tokens"], int)
+        assert usage["prompt_tokens"] >= 0
+        assert usage["completion_tokens"] >= 0
+        assert usage["total_tokens"] >= 0
 
 
 async def test_openai_compatible_streaming_response_format():

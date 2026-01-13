@@ -387,6 +387,48 @@ general:
 | `openai_api_path` | string | `/chat` | Path for legacy OpenAI endpoints |
 | `method` | string | `POST` | HTTP method for the endpoint |
 
+### FastAPI Front-End Controls
+
+Use the `general.front_end` section to control versioning headers, human-in-the-loop HTTP/SSE routes, and observability trace embedding:
+
+```yaml
+general:
+  front_end:
+    _type: fastapi
+    versioning:
+      disable_legacy_routes: false
+    hitl:
+      enable_http: true
+      enable_sse: true
+    observability:
+      enable_header_propagation: true
+      embed_trace_in_response: false
+```
+
+Versioning options:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `versioning.version` | integer | `1` | API version used for `/v{n}` prefixed routes |
+| `versioning.disable_legacy_routes` | boolean | `false` | Remove unversioned legacy routes when `true` |
+| `versioning.api_version_header` | boolean | `true` | Emit `X-API-Version` response header |
+
+Human-in-the-loop HTTP surface:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `hitl.enable_http` | boolean | `true` | Enable polling endpoints under `/v1/hitl` |
+| `hitl.enable_sse` | boolean | `true` | Enable Server-Sent Events stream at `/v1/hitl/stream` |
+| `hitl.polling_timeout_seconds` | integer | `30` | Long-poll timeout for pending prompts |
+| `hitl.interaction_timeout_seconds` | integer | `300` | Maximum wait time for a human response before timeout |
+
+Observability and trace embedding:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `observability.enable_header_propagation` | boolean | `true` | Allow inbound observability headers to flow into downstream workflow calls |
+| `observability.embed_trace_in_response` | boolean | `false` | Include the optional `_trace` payload on streaming responses |
+
 ### Endpoint Behavior
 
 #### OpenAI v1 Compatible Mode (`openai_api_v1_path` configured)
@@ -398,12 +440,6 @@ Creates a single endpoint that handles both streaming and non-streaming requests
 - **Content-Type**: `application/json`
 - **Behavior**: Routes to streaming or non-streaming based on `stream` parameter
 
-#### Legacy Mode (`openai_api_v1_path` not configured)
-
-Creates separate endpoints for different request types:
-
-- **Non-streaming**: `/<openai_api_path>`
-- **Streaming**: `<openai_api_path>/stream`
 
 ### Request Format
 

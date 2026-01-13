@@ -148,6 +148,34 @@ class EvaluateItemResponse(BaseModel):
     error: str | None = Field(default=None, description="Error message if evaluation failed")
 
 
+class VersioningConfig(BaseModel):
+    """Configuration for API versioning and legacy route handling."""
+
+    version: int = Field(default=1, description="Current API version for versioned routes")
+    disable_legacy_routes: bool = Field(default=False,
+                                        description="Disable unversioned legacy routes when set to True.")
+    api_version_header: bool = Field(default=True, description="Emit X-API-Version response header when True.")
+
+
+class HitlHttpConfig(BaseModel):
+    """Configuration for HTTP-based Human-in-the-Loop interactions."""
+
+    enable_http: bool = Field(default=True, description="Enable HTTP polling endpoints for HITL.")
+    enable_sse: bool = Field(default=True, description="Enable SSE stream for HITL notifications.")
+    polling_timeout_seconds: int = Field(default=30, ge=1, le=600, description="Long-poll timeout for pending prompts.")
+    interaction_timeout_seconds: int = Field(default=300,
+                                             ge=1,
+                                             description="Max time to wait for a human response before timeout.")
+
+
+class ObservabilityPropagationConfig(BaseModel):
+    """Configuration for observability context propagation and trace embedding."""
+
+    enable_header_propagation: bool = Field(default=True,
+                                            description="Accept and inject observability headers on requests.")
+    embed_trace_in_response: bool = Field(default=False, description="Include optional _trace payload in responses.")
+
+
 class FastApiFrontEndConfig(FrontEndBaseConfig, name="fastapi"):
     """
     A FastAPI based front end that allows a NAT workflow to be served as a microservice.
@@ -167,7 +195,7 @@ class FastApiFrontEndConfig(FrontEndBaseConfig, name="fastapi"):
         )
         openai_api_path: str | None = Field(
             default=None,
-            description=("Path for the default workflow using the OpenAI API Specification. "
+            description=("(deprecated) Path for the default workflow using the OpenAI API Specification. "
                          "If None, no workflow endpoint with the OpenAI API Specification is created."),
         )
         openai_api_v1_path: str | None = Field(
@@ -237,7 +265,10 @@ class FastApiFrontEndConfig(FrontEndBaseConfig, name="fastapi"):
         default="WARNING",
         description="Logging level for Dask.",
     )
-    step_adaptor: StepAdaptorConfig = StepAdaptorConfig()
+    step_adaptor: StepAdaptorConfig = Field(default_factory=StepAdaptorConfig)
+    versioning: VersioningConfig = Field(default_factory=VersioningConfig)
+    hitl: HitlHttpConfig = Field(default_factory=HitlHttpConfig)
+    observability: ObservabilityPropagationConfig = Field(default_factory=ObservabilityPropagationConfig)
 
     workflow: typing.Annotated[EndpointBase, Field(description="Endpoint for the default workflow.")] = EndpointBase(
         method="POST",
