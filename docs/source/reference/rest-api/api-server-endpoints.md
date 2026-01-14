@@ -429,6 +429,97 @@ Observability and trace embedding:
 | `observability.enable_header_propagation` | boolean | `true` | Allow inbound observability headers to flow into downstream workflow calls |
 | `observability.embed_trace_in_response` | boolean | `false` | Include the optional `_trace` payload on streaming responses |
 
+## Human-in-the-Loop HTTP Endpoints
+
+When `hitl.enable_http` or `hitl.enable_sse` is enabled, the NeMo Agent toolkit provides HTTP endpoints for Human-in-the-Loop (HITL) interactions. These endpoints allow external clients to poll for pending interaction prompts and submit responses.
+
+### Session Identification
+
+All HITL endpoints require a session identifier. The session ID is resolved in the following order:
+1. Query parameter: `?session_id=<id>`
+2. Cookie: `nat-session`
+3. Header: `X-Session-Id`
+4. Auto-generated UUID if none provided
+
+### Get Pending Prompts
+
+- **Route:** `/v1/hitl/pending`
+- **Method:** GET
+- **Description:** Returns pending Human-in-the-Loop interaction prompts for the current session. Supports long-polling based on the `polling_timeout_seconds` configuration.
+- **HTTP Request Example:**
+  ```bash
+  curl --request GET \
+    --url 'http://localhost:8000/v1/hitl/pending?session_id=my-session-123'
+  ```
+- **HTTP Response Example (prompts pending):**
+  ```json
+  {
+    "session_id": "my-session-123",
+    "pending": [
+      {
+        "id": "interaction-uuid-1234",
+        "prompt": "Please confirm the following action: Delete file 'data.csv'?",
+        "options": ["yes", "no"],
+        "metadata": {}
+      }
+    ]
+  }
+  ```
+- **HTTP Response Example (no prompts):** Returns HTTP 204 No Content
+
+### Submit Response
+
+- **Route:** `/v1/hitl/{interaction_id}/respond`
+- **Method:** POST
+- **Description:** Submit a human response to a pending interaction prompt.
+- **HTTP Request Example:**
+  ```bash
+  curl --request POST \
+    --url 'http://localhost:8000/v1/hitl/interaction-uuid-1234/respond?session_id=my-session-123' \
+    --header 'Content-Type: application/json' \
+    --data '{
+      "response": "yes",
+      "metadata": {}
+    }'
+  ```
+- **HTTP Response Example:**
+  ```json
+  {
+    "status": "accepted",
+    "session_id": "my-session-123",
+    "interaction_id": "interaction-uuid-1234"
+  }
+  ```
+- **Error Response (interaction not found):** Returns HTTP 404 with detail message
+
+### HITL SSE Stream
+
+- **Route:** `/v1/hitl/stream`
+- **Method:** GET
+- **Description:** Server-Sent Events (SSE) stream that pushes new interaction prompts as they arrive. This provides real-time notifications without polling.
+- **HTTP Request Example:**
+  ```bash
+  curl --request GET \
+    --url 'http://localhost:8000/v1/hitl/stream?session_id=my-session-123' \
+    --header 'Accept: text/event-stream'
+  ```
+- **SSE Event Example:**
+  ```
+  data: {"id": "interaction-uuid-5678", "prompt": "Approve data export?", "options": ["approve", "reject"], "metadata": {}}
+
+  ```
+
+### HITL Workflow Integration
+
+To use HITL in your workflows, the workflow must be configured to request human input at specific points. When a workflow reaches a point requiring human input:
+
+1. The workflow pauses and creates an `InteractionPrompt`
+2. The prompt appears in `/v1/hitl/pending` or is pushed through `/v1/hitl/stream`
+3. The client submits a response through `/v1/hitl/{interaction_id}/respond`
+4. The workflow resumes with the human-provided response
+
+The `interaction_timeout_seconds` configuration controls how long the workflow waits for a response before timing out.
+
 ### Endpoint Behavior
 
 #### OpenAI v1 Compatible Mode (`openai_api_v1_path` configured)
